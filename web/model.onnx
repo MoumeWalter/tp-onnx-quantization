@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>ONNX Web</title></head>
+<body>
+<h3>FashionMNIST dans le navigateur</h3>
+<pre id="out">Chargement...</pre>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+<script>
+const CLASSES = ["T-shirt","Pantalon","Pull","Robe","Manteau","Sandale","Chemise","Basket","Sac","Bottine"];
+
+async function loadImage(url) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+
+async function predict(url) {
+  const img = await loadImage(url);
+  const c = document.createElement("canvas");
+  c.width = 28; c.height = 28;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0, 28, 28);
+  const d = ctx.getImageData(0, 0, 28, 28).data;
+  const x = new Float32Array(28 * 28);
+  for (let i = 0; i < 784; i++) {
+    const g = (d[4*i] + d[4*i+1] + d[4*i+2]) / 3 / 255;
+    x[i] = (g - 0.2860) / 0.3530;
+  }
+  const session = await ort.InferenceSession.create("model.onnx");
+  const input = new ort.Tensor("float32", x, [1, 1, 28, 28]);
+  const out = await session.run({ input });
+  const logits = Array.from(out.output.data);
+  const m = Math.max(...logits);
+  const e = logits.map(v => Math.exp(v - m));
+  const s = e.reduce((a, b) => a + b, 0);
+  const probs = e.map(v => v / s);
+  const k = probs.indexOf(Math.max(...probs));
+  return `${CLASSES[k]} (${(probs[k]*100).toFixed(1)} %)`;
+}
+
+predict("test.png")
+  .then(r => document.getElementById("out").textContent = "Prédiction : " + r)
+  .catch(e => document.getElementById("out").textContent = "Erreur : " + e);
+</script>
+</body>
+</html>
